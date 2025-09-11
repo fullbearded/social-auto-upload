@@ -49,11 +49,10 @@ from utils.scheduler_utils import (
 from uploader.douyin_uploader.main import DouYinVideo, douyin_setup
 from uploader.bilibili_uploader.main import BilibiliUploader, read_cookie_json_file, extract_keys_from_json
 from uploader.xiaohongshu_uploader.main import XiaoHongShuVideo, xiaohongshu_setup
-from uploader.kuaishou_uploader.main import KuaiShouVideo, kuaishou_setup
+from uploader.ks_uploader.main import KSVideo, ks_setup  # 快手使用ks_uploader
 from uploader.baijiahao_uploader.main import BaiJiaHaoVideo, baijiahao_setup
 from uploader.tencent_uploader.main import TencentVideo, weixin_setup
 from uploader.tk_uploader.main import TiktokVideo, tiktok_setup
-from uploader.ks_uploader.main import KSVideo, ks_setup
 # 注意：xhs_uploader使用不同的架构，暂时不纳入调度系统
 
 
@@ -63,7 +62,7 @@ def get_platform_uploader(platform):
         'douyin': DouYinVideo,
         'bilibili': BilibiliUploader,
         'xiaohongshu': XiaoHongShuVideo,
-        'kuaishou': KuaiShouVideo,
+        'kuaishou': KSVideo,  # 快手使用KSVideo类
         'baijiahao': BaiJiaHaoVideo,
         'tencent': TencentVideo,
         'tk': TiktokVideo,
@@ -78,7 +77,7 @@ def get_cookie_path(platform):
         'douyin': Path(BASE_DIR) / "cookies" / "douyin_uploader" / "account.json",
         'bilibili': Path(BASE_DIR) / "cookies" / "bilibili_uploader" / "account.json",
         'xiaohongshu': Path(BASE_DIR) / "cookies" / "xiaohongshu_uploader" / "account.json",
-        'kuaishou': Path(BASE_DIR) / "cookies" / "kuaishou_uploader" / "account.json",
+        'kuaishou': Path(BASE_DIR) / "cookies" / "ks_uploader" / "account.json",  # 快手使用ks_uploader目录
         'baijiahao': Path(BASE_DIR) / "cookies" / "baijiahao_uploader" / "account.json",
         'tencent': Path(BASE_DIR) / "cookies" / "tencent_uploader" / "account.json",
         'tk': Path(BASE_DIR) / "cookies" / "tk_uploader" / "account.json",
@@ -100,7 +99,7 @@ async def setup_platform_cookies(platform):
         elif platform == 'xiaohongshu':
             return await xiaohongshu_setup(cookie_path, handle=False)
         elif platform == 'kuaishou':
-            return await kuaishou_setup(cookie_path, handle=False)
+            return await ks_setup(cookie_path, handle=False)  # 快手使用ks_setup函数
         elif platform == 'baijiahao':
             return await baijiahao_setup(cookie_path, handle=False)
         elif platform == 'tencent':
@@ -283,14 +282,7 @@ def main():
     
     # 配置参数
     available_platforms = {
-        'douyin': '抖音',
-        'bilibili': '哔哩哔哩',
-        'xiaohongshu': '小红书',
-        'kuaishou': '快手',
-        'baijiahao': '百家号',
-        'tencent': '腾讯视频号',
-        'tk': 'TikTok',
-        'ks': '快手(备用)',
+        'tencent': '腾讯视频号'
     }
     
     # 选择平台
