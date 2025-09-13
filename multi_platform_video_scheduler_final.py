@@ -171,6 +171,11 @@ class VideoSchedulerFinal:
                 
                 try:
                     title, tags = get_title_and_hashtags(str(video))
+
+                    # 打印视频文件名、标题和 hashtag
+                    print(f"视频文件名：{video}")
+                    print(f"标题：{title}")
+                    print(f"Hashtag：{tags}")
                     
                     result = await UploadEngine.upload_video_to_platform(
                         platform=platform,

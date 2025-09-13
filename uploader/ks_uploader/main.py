@@ -62,7 +62,7 @@ async def get_ks_cookie(account_file):
 
 
 class KSVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -70,6 +70,8 @@ class KSVideo(object):
         self.account_file = account_file
         self.date_format = '%Y-%m-%d %H:%M'
         self.local_executable_path = LOCAL_CHROME_PATH
+        self.thumbnail_path = thumbnail_path
+        print(f"[KSVideo构造函数] thumbnail_path: {thumbnail_path}, 类型: {type(thumbnail_path)}")
 
     async def handle_upload_error(self, page):
         kuaishou_logger.error("视频出错了，重新上传中")
@@ -107,9 +109,6 @@ class KSVideo(object):
         await file_chooser.set_files(self.file_path)
 
         await asyncio.sleep(2)
-
-        # if not await page.get_by_text("封面编辑").count():
-        #     raise Exception("似乎没有跳转到到编辑页面")
 
         await asyncio.sleep(1)
 
@@ -161,6 +160,16 @@ class KSVideo(object):
         if self.publish_date != 0:
             await self.set_schedule_time(page, self.publish_date)
 
+        await asyncio.sleep(5)
+
+        # 封面设置
+        if not await page.get_by_text("封面设置").count():
+            raise Exception("似乎没有跳转到到编辑页面")
+        else:
+            await self.set_thumbnail(page, self.thumbnail_path)
+
+        await asyncio.sleep(1)
+
         # 判断视频是否发布成功
         while True:
             try:
@@ -196,6 +205,8 @@ class KSVideo(object):
         async with async_playwright() as playwright:
             await self.upload(playwright)
 
+    # 设置封面
+
     async def set_schedule_time(self, page, publish_date):
         kuaishou_logger.info("click schedule")
         publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M:%S")
@@ -210,3 +221,28 @@ class KSVideo(object):
         await page.keyboard.type(str(publish_date_hour))
         await page.keyboard.press("Enter")
         await asyncio.sleep(1)
+
+    async def set_thumbnail(self, page, thumbnail_path):
+        if thumbnail_path:
+            # 确保路径是字符串格式
+            thumbnail_str = str(thumbnail_path)
+
+            # 获取所有匹配的元素
+            cover_elements = page.locator('text="封面设置"')
+            count = await cover_elements.count()
+            if count >= 2:
+                await cover_elements.nth(1).hover()
+                await page.wait_for_timeout(500)
+                await cover_elements.nth(1).click()
+            else:
+                print(f"只找到 {count} 个封面设置元素")
+
+            await page.wait_for_selector("div.ant-modal:visible")
+            await page.click('text="上传封面"')
+
+            await page.wait_for_timeout(2000)  # 等待2秒
+            # 定位到上传区域并点击
+            await page.locator("div[class^='ant-modal-content'] >> input").set_input_files(thumbnail_str)
+            await page.wait_for_timeout(2000)  # 等待2秒
+            # await page.click('text="去编辑"')
+            await page.locator("div[class^='ant-modal-content'] button:visible:has-text('确认')").click()
