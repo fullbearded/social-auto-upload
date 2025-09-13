@@ -15,7 +15,7 @@ sys.path.append(str(Path(__file__).parent))
 
 # 平台对应关系和可用的统计器
 try:
-    from kuaishou_uploader import get_kuaishou_statistics, KuaishouStatsUploader
+    from kuaishou_stat import get_kuaishou_statistics, KuaishouStatsUploader
     AVAILABLE_PLATFORMS = {
         'kuaishou': '快手',
         'ks': '快手',  # 别名
@@ -114,7 +114,7 @@ class StatisticsController:
         
         # 针对不同平台创建相应报告生成器
         if platform in ['kuaishou', 'ks']:
-            from kuaishou_uploader.kuaishou_visualizer import KuaishouReportManager
+            from kuaishou_stat.kuaishou_visualizer import KuaishouReportManager
             report_manager = KuaishouReportManager(output_dir)
             reports = report_manager.generate_all_reports(data)
             
