@@ -171,13 +171,33 @@ class VideoSchedulerFinal:
                 
                 try:
                     title, tags = get_title_and_hashtags(str(video))
-                    thumbnail_path = str(video).replace(".mp4", ".jpg")
-
-                    # 打印视频文件名、标题和 hashtag
+                    
+                    # 智能封面图检测 - 支持多种格式
+                    thumbnail_path = None
+                    video_path = Path(video)
+                    possible_thumbnails = [
+                        video_path.with_suffix('.jpg'),
+                        video_path.with_suffix('.png'),
+                        video_path.with_suffix('.jpeg'),
+                        video_path.parent / f"{video_path.stem}_thumbnail.jpg",
+                        video_path.parent / f"{video_path.stem}_thumbnail.png",
+                        video_path.parent / f"{video_path.stem}_cover.jpg",
+                        video_path.parent / f"{video_path.stem}_cover.png"
+                    ]
+                    
+                    for thumb_path in possible_thumbnails:
+                        if thumb_path.exists():
+                            thumbnail_path = str(thumb_path)
+                            break
+                    
+                    # 打印视频信息
                     print(f"视频文件名：{video}")
                     print(f"标题：{title}")
                     print(f"Hashtag：{tags}")
-                    print(f"封面路径：{thumbnail_path}")
+                    if thumbnail_path:
+                        print(f"封面路径：{thumbnail_path}")
+                    else:
+                        print("封面路径：无封面图（使用平台默认）")
                     
                     result = await UploadEngine.upload_video_to_platform(
                         platform=platform,
@@ -185,7 +205,7 @@ class VideoSchedulerFinal:
                         title=title,
                         tags=tags,
                         publish_time=self.publish_datetimes[idx],
-                        video_info={'global_index': idx},
+                        video_info={'global_index': idx, 'thumbnail_path': thumbnail_path},
                         risk_controller=risk
                     )
                     

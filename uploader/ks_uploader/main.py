@@ -156,17 +156,18 @@ class KSVideo(object):
         if retry_count == max_retries:
             kuaishou_logger.warning("超过最大重试次数，视频上传可能未完成。")
 
-        # 定时任务
-        if self.publish_date != 0:
-            await self.set_schedule_time(page, self.publish_date)
-
-        await asyncio.sleep(5)
-
         # 封面设置
         if not await page.get_by_text("封面设置").count():
             raise Exception("似乎没有跳转到到编辑页面")
         else:
             await self.set_thumbnail(page, self.thumbnail_path)
+
+        await asyncio.sleep(5)
+
+        # 定时任务
+        if self.publish_date != 0:
+            await self.set_schedule_time(page, self.publish_date)
+
 
         await asyncio.sleep(1)
 

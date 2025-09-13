@@ -50,9 +50,16 @@ class UploadEngine:
             return False
     
     def get_thumbnail_path(self, video_file: Path) -> Optional[Path]:
-        """获取缩略图路径"""
-        thumbnail_path = video_file.with_suffix('.png')
-        return thumbnail_path if thumbnail_path.exists() else None
+        """获取缩略图路径 - 支持多种格式"""
+        # 尝试多种封面图格式
+        possible_extensions = ['.png', '.jpg', '.jpeg']
+        
+        for ext in possible_extensions:
+            thumbnail_path = video_file.with_suffix(ext)
+            if thumbnail_path.exists():
+                return thumbnail_path
+        
+        return None
     
     def format_upload_info(self, video_file: Path, title: str, tags: str, 
                           publish_time: datetime, video_info: Dict) -> Dict:
@@ -76,7 +83,7 @@ class UploadEngine:
         }
     
     async def upload_video(self, video_file: Path, title: str, tags: str, 
-                          publish_time: datetime, video_info: Dict) -> bool:
+                          publish_time: datetime, video_info: Dict, thumbnail_path: str = None) -> bool:
         """上传单个视频
         
         Args:
@@ -104,12 +111,12 @@ class UploadEngine:
             # 腾讯平台特殊处理
             if self.platform == 'tencent' and self.risk_controller:
                 return await self._upload_tencent_video(
-                    video_file, title, tags, publish_time, video_info
+                    video_file, title, tags, publish_time, video_info, thumbnail_path
                 )
             else:
                 # 非腾讯平台，使用原始逻辑
                 return await self._upload_general_video(
-                    video_file, title, tags, publish_time
+                    video_file, title, tags, publish_time, thumbnail_path
                 )
         
         except Exception as e:
@@ -122,7 +129,7 @@ class UploadEngine:
             return False
     
     async def _upload_tencent_video(self, video_file: Path, title: str, tags: str,
-                                  publish_time: datetime, video_info: Dict) -> bool:
+                                  publish_time: datetime, video_info: Dict, thumbnail_path: str = None) -> bool:
         """腾讯平台上传处理"""
         from utils.tencent_risk_control import safe_tencent_upload
         
@@ -149,8 +156,9 @@ class UploadEngine:
                 
                 await asyncio.sleep(wait_seconds)
         
-        # 创建上传器实例
-        thumbnail_path = self.get_thumbnail_path(video_file)
+        # 使用传入的封面图路径，如果没有则自动生成
+        if not thumbnail_path:
+            thumbnail_path = self.get_thumbnail_path(video_file)
         
         if thumbnail_path:
             app = self.uploader_class(
@@ -169,9 +177,11 @@ class UploadEngine:
         return await safe_tencent_upload(upload_func, self.risk_controller)
     
     async def _upload_general_video(self, video_file: Path, title: str, tags: str,
-                                  publish_time: datetime) -> bool:
+                                  publish_time: datetime, thumbnail_path: str = None) -> bool:
         """通用平台上传处理"""
-        thumbnail_path = self.get_thumbnail_path(video_file)
+        # 使用传入的封面图路径，如果没有则自动生成
+        if not thumbnail_path:
+            thumbnail_path = self.get_thumbnail_path(video_file)
         
         if thumbnail_path:
             app = self.uploader_class(
@@ -205,4 +215,6 @@ class UploadEngine:
             bool: 上传是否成功
         """
         engine = cls(platform, risk_controller)
-        return await engine.upload_video(video_file, title, tags, publish_time, video_info)
+        # 从 video_info 中提取封面图路径
+        thumbnail_path = video_info.get('thumbnail_path')
+        return await engine.upload_video(video_file, title, tags, publish_time, video_info, thumbnail_path)
