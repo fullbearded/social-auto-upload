@@ -144,17 +144,11 @@ class UploadEngine:
             
             if wait_seconds > 0:
                 wait_minutes = int(wait_seconds // 60)
-                print(f"⏳ 风控延迟: 需要等待 {wait_minutes} 分钟")
-                
-                # 询问用户是否继续等待
-                try:
-                    continue_upload = input(f"   🚦 是否等待 {wait_minutes} 分钟后继续？ (y/N): ").strip().lower()
-                    if continue_upload != 'y':
-                        return False
-                except:
-                    pass  # 非交互环境默认等待
-                
-                await asyncio.sleep(wait_seconds)
+                max_minutes = max(wait_minutes, 10)
+                print(f"⏳ 风控延迟: 需要等待 {max_minutes} 分钟")
+                max_minutes = max(wait_minutes, 10)
+
+                await asyncio.sleep(max_minutes)
         
         # 使用传入的封面图路径，如果没有则自动生成
         if not thumbnail_path:

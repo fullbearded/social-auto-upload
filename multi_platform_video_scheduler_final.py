@@ -15,6 +15,7 @@ from pathlib import Path
 from utils.files_times import get_title_and_hashtags
 from utils.scheduler_utils import generate_advanced_schedule, validate_video_schedule
 from utils.tencent_risk_control import TencentRiskController
+from utils.countdown import countdown_for_platform
 
 # 工具类
 from utils.scheduler.platform_manager import PlatformManager
@@ -218,9 +219,8 @@ class VideoSchedulerFinal:
                     
                     # 快手平台特殊间隔保护
                     if platform in ['kuaishou', 'ks'] and idx < len(self.video_files) - 1:
-                        delay = random.randint(60, 300)
-                        print(f"⏳ 等待{delay}秒...")
-                        await asyncio.sleep(delay)
+                        delay = random.randint(20, 120)
+                        await countdown_for_platform(platform, delay)
                         
                 except Exception as e:
                     fail += 1
