@@ -6,32 +6,78 @@
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Dict, Optional
 
 # 上级路径
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 # 平台对应关系和可用的统计器
 try:
-    from kuaishou_stat import get_kuaishou_statistics, KuaishouStatsUploader
-    AVAILABLE_PLATFORMS = {
-        'kuaishou': '快手',
-        'ks': '快手',  # 别名
-    }
+    from statistics.kuaishou_stat import get_kuaishou_statistics, KuaishouStatsUploader
     KUAISHOU_AVAILABLE = True
 except ImportError:
-    AVAILABLE_PLATFORMS = {}
-    KUAISHOU_AVAILABLE = False
+    try:
+        # 尝试从项目根目录导入
+        from kuaishou_stat import get_kuaishou_statistics, KuaishouStatsUploader
+        KUAISHOU_AVAILABLE = True
+    except ImportError:
+        KUAISHOU_AVAILABLE = False
+
+try:
+    from statistics.tencent_stat import get_tencent_statistics, TencentStatsUploader
+    TENCENT_AVAILABLE = True
+except ImportError:
+    try:
+        # 尝试从当前目录导入
+        from tencent_stat import get_tencent_statistics, TencentStatsUploader
+        TENCENT_AVAILABLE = True
+    except ImportError:
+        TENCENT_AVAILABLE = False
+
+try:
+    from statistics.xiaohongshu_stat import get_xiaohongshu_statistics
+    XIAOHONGSHU_AVAILABLE = True
+except ImportError:
+    try:
+        # 尝试从项目根目录导入
+        from statistics.xiaohongshu_stat import get_xiaohongshu_statistics
+        XIAOHONGSHU_AVAILABLE = True
+    except ImportError:
+        XIAOHONGSHU_AVAILABLE = False
+
+# 构建可用平台字典
+AVAILABLE_PLATFORMS = {}
+
+if KUAISHOU_AVAILABLE:
+    AVAILABLE_PLATFORMS.update({
+        'kuaishou': '快手',
+        'ks': '快手',  # 别名
+    })
+
+if TENCENT_AVAILABLE:
+    AVAILABLE_PLATFORMS.update({
+        'tencent': '腾讯视频号',
+        'weixin': '腾讯视频号',  # 别名
+        'tx': '腾讯视频号',  # 别名
+    })
+
+if XIAOHONGSHU_AVAILABLE:
+    AVAILABLE_PLATFORMS.update({
+        'xiaohongshu': '小红书',
+        'xhs': '小红书',  # 别名
+    })
 
 
 class StatisticsController:
     """统计控制器 - 管理平台统计获取"""
     
-    def __init__(self):
+    def __init__(self, debug_mode=False):
         self.supported_platforms = AVAILABLE_PLATFORMS.copy()
         self.base_dir = Path("cookies")
+        self.debug_mode = debug_mode
     
     def list_platforms(self):
         """列出支持的平台"""
@@ -47,6 +93,10 @@ class StatisticsController:
             
         if platform in ['kuaishou', 'ks']:
             return KUAISHOU_AVAILABLE
+        elif platform in ['tencent', 'weixin', 'tx']:
+            return TENCENT_AVAILABLE
+        elif platform in ['xiaohongshu', 'xhs']:
+            return XIAOHONGSHU_AVAILABLE
         
         return False
     
@@ -54,6 +104,10 @@ class StatisticsController:
         """获取平台cookie路径"""
         if platform in ['kuaishou', 'ks']:
             return self.base_dir / "ks_uploader" / "account.json"
+        elif platform in ['tencent', 'weixin', 'tx']:
+            return self.base_dir / "tencent_uploader" / "account.json"
+        elif platform in ['xiaohongshu', 'xhs']:
+            return self.base_dir / "xiaohongshu_uploader" / "account.json"
         
         return None
     
@@ -70,8 +124,20 @@ class StatisticsController:
             print(f"   ❌ {platform} Cookie未找到: {cookie_path}")
             return False
         
-        # 仅快手实现验证
+        # 平台验证 - 实际运行时会验证
         if platform in ['kuaishou', 'ks']:
+            try:
+                return True  # 实际运行时会验证
+            except Exception as e:
+                print(f"   ❌ {platform} Cookie验证失败: {e}")
+                return False
+        elif platform in ['tencent', 'weixin', 'tx']:
+            try:
+                return True  # 实际运行时会验证
+            except Exception as e:
+                print(f"   ❌ {platform} Cookie验证失败: {e}")
+                return False
+        elif platform in ['xiaohongshu', 'xhs']:
             try:
                 return True  # 实际运行时会验证
             except Exception as e:
@@ -101,6 +167,22 @@ class StatisticsController:
             except Exception as e:
                 print(f"❌ {platform} 数据获取失败: {e}")
                 return None
+        elif platform in ['tencent', 'weixin', 'tx']:
+            try:
+                data = await get_tencent_statistics(str(cookie_path), debug=self.debug_mode)
+                print(f"✅ {platform} 数据获取成功")
+                return data
+            except Exception as e:
+                print(f"❌ {platform} 数据获取失败: {e}")
+                return None
+        elif platform in ['xiaohongshu', 'xhs']:
+            try:
+                data = await get_xiaohongshu_statistics(str(cookie_path), debug=self.debug_mode)
+                print(f"✅ {platform} 数据获取成功")
+                return data
+            except Exception as e:
+                print(f"❌ {platform} 数据获取失败: {e}")
+                return None
         
         return None
     
@@ -114,14 +196,29 @@ class StatisticsController:
         
         # 针对不同平台创建相应报告生成器
         if platform in ['kuaishou', 'ks']:
-            from kuaishou_stat.kuaishou_visualizer import KuaishouReportManager
-            report_manager = KuaishouReportManager(output_dir)
-            reports = report_manager.generate_all_reports(data)
-            
-            print(f"\n📊 {platform} 报告生成完成:")
-            for format_name, file_path in reports.items():
-                if file_path:
-                    print(f"   {format_name}: {Path(file_path).name}")
+            try:
+                from kuaishou_stat.kuaishou_visualizer import KuaishouReportManager
+                report_manager = KuaishouReportManager(output_dir)
+                reports = report_manager.generate_all_reports(data)
+                
+                print(f"\n📊 {platform} 报告生成完成:")
+                for format_name, file_path in reports.items():
+                    if file_path:
+                        print(f"   {format_name}: {Path(file_path).name}")
+            except ImportError:
+                print(f"⚠️  {platform} 报告生成模块未找到，跳过报告生成")
+        elif platform in ['tencent', 'weixin', 'tx']:
+            try:
+                from tencent_visualizer import TencentReportManager
+                report_manager = TencentReportManager(output_dir)
+                reports = report_manager.generate_all_reports(data)
+                
+                print(f"\n📊 {platform} 报告生成完成:")
+                for format_name, file_path in reports.items():
+                    if file_path:
+                        print(f"   {format_name}: {Path(file_path).name}")
+            except ImportError:
+                print(f"⚠️  {platform} 报告生成模块未找到，跳过报告生成")
         
         return True
 
@@ -135,9 +232,13 @@ def create_ks_visualizer():
 async def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="快手多平台统计获取器",
-        epilog="示例: statistics_cli.py kuaishou --report --format json"
+        description="多平台统计获取器 - 支持快手、腾讯视频号等平台",
+        epilog="示例: python statistics_cli.py get tencent --debug\n示例: python statistics_cli.py list"
     )
+    
+    # 全局参数
+    parser.add_argument('--debug', action='store_true',
+                       help='调试模式：浏览器保持打开状态，便于调试')
 
     # 子命令
     sub_parsers = parser.add_subparsers(dest='command', help='可用命令')
@@ -156,7 +257,7 @@ async def main():
                            help='要获取数据的平台')
     get_parser.add_argument('--output', default='reports', 
                            help='输出目录 (默认: reports)')
-    get_parser.add_argument('--format', choices=['json', 'html', 'csv', 'all'],
+    get_parser.add_argument('--format', choices=['json', 'html', 'markdown', 'all'],
                            default='all', help='输出格式')
     get_parser.add_argument('--show', action='store_true',
                            help='显示数据而不保存')
@@ -170,7 +271,7 @@ async def main():
 
     args = parser.parse_args()
     
-    controller = StatisticsController()
+    controller = StatisticsController(debug_mode=args.debug)
     
     if args.command == 'list':
         controller.list_platforms()
@@ -203,10 +304,11 @@ async def main():
     
     else:
         # 默认显示帮助
-        print("快手多平台统计获取器")
+        print("多平台统计获取器")
         print("\n支持操作:")
         controller.list_platforms()
         print("\n可用命令: list, check, get, analyze")
+        print("\n使用 --debug 参数可在调试时保持浏览器打开")
 
 
 if __name__ == '__main__':

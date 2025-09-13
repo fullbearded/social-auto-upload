@@ -82,13 +82,14 @@ async def weixin_setup(account_file, handle=False):
 
 
 class TencentVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, category=None):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, category=None, thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
         self.publish_date = publish_date
         self.account_file = account_file
         self.category = category
+        self.thumbnail_path = thumbnail_path
         self.local_executable_path = LOCAL_CHROME_PATH
 
     async def set_schedule_time_tencent(self, page, publish_date):
@@ -154,6 +155,9 @@ class TencentVideo(object):
         await self.add_title_tags(page)
         # 添加商品
         # await self.add_product(page)
+        # 设置缩略图（如果有）
+        # if self.thumbnail_path:
+            # await self.set_thumbnail(page)
         # 合集功能
         await self.add_collection(page)
         # 原创选择
@@ -230,6 +234,52 @@ class TencentVideo(object):
             await page.keyboard.type("#" + tag)
             await page.keyboard.press("Space")
         tencent_logger.info(f"成功添加hashtag: {len(self.tags)}")
+
+    async def set_thumbnail(self, page):
+        """设置视频缩略图"""
+        try:
+            tencent_logger.info(f"设置缩略图: {self.thumbnail_path}")
+            # 等待视频上传完成
+            await asyncio.sleep(2)
+            
+            # 查找缩略图上传区域 - 视频号可能有一个封面图设置区域
+            # 根据微信视频号的界面设计，通常会有一个编辑封面图的按钮
+            thumbnail_button = page.locator("button:has-text('编辑封面'), button:has-text('设置封面'), .cover-edit-btn")
+            
+            if await thumbnail_button.count() > 0:
+                await thumbnail_button.first.click()
+                tencent_logger.info("点击了编辑封面按钮")
+                await asyncio.sleep(1)
+                
+                # 查找文件上传输入框
+                file_input = page.locator("input[type='file']:visible")
+                if await file_input.count() > 0:
+                    await file_input.set_input_files(self.thumbnail_path)
+                    tencent_logger.info("缩略图文件已选择")
+                    await asyncio.sleep(2)
+                    
+                    # 确认缩略图设置
+                    confirm_button = page.locator("button:has-text('确定'), button:has-text('确认'), .confirm-btn")
+                    if await confirm_button.count() > 0:
+                        await confirm_button.first.click()
+                        tencent_logger.success("缩略图设置成功")
+                    else:
+                        tencent_logger.info("未找到确认按钮，可能已自动确认")
+                else:
+                    tencent_logger.warning("未找到文件上传输入框")
+            else:
+                # 尝试直接上传缩略图文件
+                file_input = page.locator("input[type='file']")
+                if await file_input.count() > 0:
+                    await file_input.set_input_files(self.thumbnail_path)
+                    tencent_logger.info("直接设置缩略图文件")
+                    await asyncio.sleep(2)
+                else:
+                    tencent_logger.warning("未找到缩略图上传区域，跳过缩略图设置")
+                    
+        except Exception as e:
+            tencent_logger.error(f"设置缩略图时出错: {e}")
+            # 缩略图设置失败不影响视频上传，继续执行
 
     async def add_collection(self, page):
         collection_elements = page.get_by_text("添加到合集").locator("xpath=following-sibling::div").locator(

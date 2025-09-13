@@ -174,33 +174,31 @@ class XiaoHongShuVideo(object):
             await page.keyboard.press("Delete")
             await page.keyboard.type(self.title)
             await page.keyboard.press("Enter")
-        css_selector = ".ql-editor" # 不能加上 .ql-blank 属性，这样只能获取第一次非空状态
-        for index, tag in enumerate(self.tags, start=1):
-            await page.type(css_selector, "#" + tag)
-            await page.press(css_selector, "Space")
-        xiaohongshu_logger.info(f'总共添加{len(self.tags)}个话题')
-
-        # while True:
-        #     # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
-        #     try:
-        #         #  新版：定位重新上传
-        #         number = await page.locator('[class^="long-card"] div:has-text("重新上传")').count()
-        #         if number > 0:
-        #             xiaohongshu_logger.success("  [-]视频上传完毕")
-        #             break
-        #         else:
-        #             xiaohongshu_logger.info("  [-] 正在上传视频中...")
-        #             await asyncio.sleep(2)
-
-        #             if await page.locator('div.progress-div > div:has-text("上传失败")').count():
-        #                 xiaohongshu_logger.error("  [-] 发现上传出错了... 准备重试")
-        #                 await self.handle_upload_error(page)
-        #     except:
-        #         xiaohongshu_logger.info("  [-] 正在上传视频中...")
-        #         await asyncio.sleep(2)
+        # 修复：使用更精确的选择器定位内容编辑器区域
+        content_selector = "div.plugin.editor-container div.ProseMirror"
+        xiaohongshu_logger.info('  [-] 正在添加话题标签...')
         
+        # 确保内容编辑器已获取焦点
+        try:
+            await page.click(content_selector)
+            await asyncio.sleep(0.5)  # 等待编辑器获取焦点
+        except Exception as e:
+            xiaohongshu_logger.warning(f'  [-] 点击内容编辑器失败: {e}')
+        
+        # 添加话题标签
+        for index, tag in enumerate(self.tags, start=1):
+            try:
+                await page.type(content_selector, "#" + tag)
+                await page.press(content_selector, "Space")
+                xiaohongshu_logger.info(f'  [-] 已添加话题: #{tag}')
+                await asyncio.sleep(0.3)  # 避免输入过快
+            except Exception as e:
+                xiaohongshu_logger.error(f'  [-] 添加话题#{tag}失败: {e}')
+                
+        xiaohongshu_logger.info(f'  [-] 总共添加{len(self.tags)}个话题')
+
         # 上传视频封面
-        # await self.set_thumbnail(page, self.thumbnail_path)
+        await self.set_thumbnail(page, self.thumbnail_path)
 
         # 更换可见元素
         # await self.set_location(page, "青岛市")
@@ -244,18 +242,152 @@ class XiaoHongShuVideo(object):
     
     async def set_thumbnail(self, page: Page, thumbnail_path: str):
         if thumbnail_path:
-            await page.click('text="选择封面"')
-            await page.wait_for_selector("div.semi-modal-content:visible")
-            await page.click('text="设置竖封面"')
-            await page.wait_for_timeout(2000)  # 等待2秒
+            xiaohongshu_logger.info(f'  [-] 正在上传封面图: {thumbnail_path}')
+            
+            # 点击设置封面按钮
+            try:
+                await page.click('text="设置封面"')
+                xiaohongshu_logger.info('  [-] 已点击设置封面按钮')
+            except Exception as e:
+                xiaohongshu_logger.warning(f'  [-] 点击设置封面按钮失败: {e}')
+                # 尝试其他可能的选择器
+                try:
+                    await page.locator('button:has-text("设置封面")').click()
+                    xiaohongshu_logger.info('  [-] 使用备用选择器成功点击设置封面按钮')
+                except:
+                    xiaohongshu_logger.error('  [-] 无法找到设置封面按钮')
+                    return
+            
+            # 等待封面模态框出现
+            try:
+                await page.wait_for_selector("div.cover-modal:visible", timeout=10000)
+                xiaohongshu_logger.info('  [-] 封面模态框已出现')
+            except:
+                xiaohongshu_logger.warning('  [-] 等待封面模态框超时，尝试继续')
+            
+            await page.wait_for_timeout(2000)  # 等待2秒确保模态框完全加载
+            
             # 定位到上传区域并点击
-            await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
+            try:
+                # 方法1：精确定位到图片上传的input元素
+                # 根据日志信息，第二个input是图片上传的 (accept="image/png, image/jpeg, image/*")
+                image_upload_input = page.locator("input[type='file']").nth(1)
+                if await image_upload_input.count() > 0:
+                    # 验证这个input是用于图片上传的
+                    accept_attr = await image_upload_input.get_attribute('accept')
+                    if accept_attr and 'image' in accept_attr:
+                        await image_upload_input.set_input_files(thumbnail_path)
+                        xiaohongshu_logger.info('  [-] 已通过精确定位的图片input元素上传封面图')
+                    else:
+                        xiaohongshu_logger.warning('  [-] 第二个input不是图片上传类型，尝试方法2')
+                        raise Exception("不是图片上传input")
+                else:
+                    xiaohongshu_logger.warning('  [-] 未找到第二个input元素，尝试方法2')
+                    raise Exception("未找到图片上传input")
+                    
+            except Exception as e:
+                xiaohongshu_logger.info(f'  [-] 方法1失败: {e}，尝试方法2')
+                try:
+                    # 方法2：通过accept属性精确查找图片上传input
+                    image_input_selector = "input[type='file'][accept*='image']"
+                    image_upload_input = page.locator(image_input_selector)
+                    if await image_upload_input.count() > 0:
+                        await image_upload_input.set_input_files(thumbnail_path)
+                        xiaohongshu_logger.info('  [-] 已通过accept属性定位上传封面图')
+                    else:
+                        xiaohongshu_logger.warning('  [-] 未找到accept属性包含image的input，尝试方法3')
+                        raise Exception("未找到图片accept属性的input")
+                        
+                except Exception as e2:
+                    xiaohongshu_logger.info(f'  [-] 方法2失败: {e2}，尝试方法3')
+                    try:
+                        # 方法3：点击上传区域触发文件选择
+                        upload_area_selectors = [
+                            "div[class^='cover-container']",
+                            ".upload-btn", 
+                            ".cover-upload-area",
+                            "div:has-text('上传图片')"
+                        ]
+                        
+                        file_uploaded = False
+                        for selector in upload_area_selectors:
+                            try:
+                                upload_area = page.locator(selector)
+                                if await upload_area.count() > 0 and await upload_area.is_visible():
+                                    async with page.expect_file_chooser() as fc_info:
+                                        await upload_area.click()
+                                    file_chooser = await fc_info.value
+                                    await file_chooser.set_files(thumbnail_path)
+                                    xiaohongshu_logger.info(f'  [-] 已通过选择器 "{selector}" 上传封面图')
+                                    file_uploaded = True
+                                    break
+                            except:
+                                continue
+                        
+                        if not file_uploaded:
+                            xiaohongshu_logger.error('  [-] 所有上传区域选择器都失败')
+                            return
+                            
+                    except Exception as e3:
+                        xiaohongshu_logger.error(f'  [-] 所有上传方法都失败: {e3}')
+                        return
+            
+            # 等待图片上传和处理
+            await page.wait_for_timeout(3000)  # 等待3秒
+            
+            # 验证canvas是否已更新
+            try:
+                # 检查主canvas是否有内容
+                canvas = page.locator('#zeusGL')
+                if await canvas.count() > 0:
+                    # 检查canvas是否有图像数据
+                    canvas_content = await canvas.evaluate('''(canvas) => {
+                        const ctx = canvas.getContext('2d');
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const hasContent = imageData.data.some(channel => channel !== 0);
+                        return hasContent;
+                    }''')
+                    
+                    if canvas_content:
+                        xiaohongshu_logger.info('  [-] 封面图已成功渲染到canvas')
+                    else:
+                        xiaohongshu_logger.warning('  [-] canvas中没有检测到图像内容')
+                else:
+                    xiaohongshu_logger.warning('  [-] 未找到zeusGL canvas元素')
+            except Exception as e:
+                xiaohongshu_logger.warning(f'  [-] 验证canvas渲染失败: {e}')
+            
+            # 等待额外的处理时间
             await page.wait_for_timeout(2000)  # 等待2秒
-            await page.locator("div[class^='extractFooter'] button:visible:has-text('完成')").click()
-            # finish_confirm_element = page.locator("div[class^='confirmBtn'] >> div:has-text('完成')")
-            # if await finish_confirm_element.count():
-            #     await finish_confirm_element.click()
-            # await page.locator("div[class^='footer'] button:has-text('完成')").click()
+            
+            # 点击确定按钮
+            try:
+                # 尝试多个可能的选择器
+                confirm_selectors = [
+                    "div[class^='mojito-btn-container'] button:visible:has-text('确定')",
+                    "button:has-text('确定')",
+                    "div[class^='confirmBtn'] >> div:has-text('完成')",
+                    "div[class^='footer'] button:has-text('完成')"
+                ]
+                
+                for selector in confirm_selectors:
+                    try:
+                        confirm_button = page.locator(selector)
+                        if await confirm_button.count() > 0 and await confirm_button.is_visible():
+                            await confirm_button.click()
+                            xiaohongshu_logger.info(f'  [-] 已使用选择器 "{selector}" 点击确认按钮')
+                            break
+                    except:
+                        continue
+                else:
+                    xiaohongshu_logger.warning('  [-] 未找到确认按钮，可能需要手动确认')
+                    
+            except Exception as e:
+                xiaohongshu_logger.warning(f'  [-] 点击确认按钮失败: {e}')
+            
+            # 等待模态框关闭
+            await page.wait_for_timeout(2000)
+            xiaohongshu_logger.info('  [-] 封面图上传流程完成')
 
     async def set_location(self, page: Page, location: str = "青岛市"):
         print(f"开始设置位置: {location}")
