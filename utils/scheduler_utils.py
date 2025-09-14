@@ -35,13 +35,13 @@ def shuffle_and_group_videos(video_files: List, group_size: int = 5) -> Tuple[Li
         start_idx = i * group_size
         end_idx = start_idx + group_size
         groups.append(shuffled_videos[start_idx:end_idx])
-    
+
     # 处理剩余视频
     remainder_videos = []
     if remainder > 0:
         start_idx = full_groups * group_size
         remainder_videos = shuffled_videos[start_idx:]
-    
+
     return groups, remainder_videos
 
 
@@ -160,7 +160,7 @@ def generate_advanced_schedule(video_files: List, daily_times: List[int],
             # 添加随机分钟偏移（0-random_minutes分钟）
             random_minute_offset = random.randint(0, random_minutes)
             time_offset = timedelta(
-                days=day_offset + 1,  # +1 to start from next day
+                days=day_offset,  # 从指定的开始日期开始，不再额外加1
                 hours=hour - current_time.hour,
                 minutes=-current_time.minute + random_minute_offset,
                 seconds=-current_time.second,
