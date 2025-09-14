@@ -514,9 +514,32 @@ class TencentVideo(object):
             await asyncio.sleep(3)
             await self._wait_for_thumbnail_area_ready(page)
 
-            await asyncio.sleep(10)
-            # 尝试方法1：通过编辑封面按钮设置
-            await self._set_thumbnail_via_edit_button(page)
+            # 使用兼容的封面预览检查器
+            from utils.tencent_cover_preview_checker import CoverPreviewChecker
+            
+            tencent_logger.info("使用兼容的封面预览检查器...")
+            checker = CoverPreviewChecker(page)
+            
+            # 等待封面预览准备就绪
+            is_ready, message, clickable_element = await checker.wait_for_cover_preview_ready(timeout=30)
+            
+            if is_ready and clickable_element:
+                tencent_logger.info(f"✓ 封面预览准备就绪: {message}")
+                # 使用兼容的方法触发封面更换弹窗
+                dialog_triggered = await checker.trigger_cover_change_dialog()
+                if dialog_triggered:
+                    tencent_logger.success("✓ 封面更换弹窗已触发")
+                    # 等待弹窗稳定
+                    await asyncio.sleep(3)
+                    # 设置缩略图
+                    await self._set_thumbnail_in_dialog(page)
+                else:
+                    tencent_logger.warning("⚠ 触发封面更换弹窗失败，尝试传统方法")
+                    await self._set_thumbnail_via_edit_button(page)
+            else:
+                tencent_logger.warning(f"⚠ 封面预览未准备就绪: {message}")
+                tencent_logger.info("尝试传统方法设置缩略图...")
+                await self._set_thumbnail_via_edit_button(page)
             
         except Exception as e:
             tencent_logger.error(f"设置缩略图时出错: {e}")
@@ -655,6 +678,34 @@ class TencentVideo(object):
                 tencent_logger.warning("未找到任何文件输入框")
         except Exception as e:
             tencent_logger.error(f"通过所有输入框设置缩略图失败: {e}")
+
+    async def _set_thumbnail_in_dialog(self, page):
+        """在封面更换弹窗中设置缩略图"""
+        try:
+            tencent_logger.info("在封面更换弹窗中设置缩略图...")
+            
+            # 等待弹窗稳定
+            await asyncio.sleep(2)
+            
+            # 查找图片类型的文件上传输入框
+            image_file_input = page.locator("input[type='file'][accept*='image']")
+            
+            if await image_file_input.count() > 0:
+                tencent_logger.info("找到图片上传输入框")
+                await image_file_input.set_input_files(self.thumbnail_path)
+                tencent_logger.info("缩略图文件已选择")
+                await asyncio.sleep(3)
+                
+                # 确认缩略图设置
+                await self._confirm_thumbnail_setting(page)
+            else:
+                # 尝试其他方式查找文件上传框
+                await self._set_thumbnail_via_all_inputs(page)
+                
+        except Exception as e:
+            tencent_logger.error(f"在弹窗中设置缩略图失败: {e}")
+            tencent_logger.info("尝试传统方法...")
+            await self._set_thumbnail_via_edit_button(page)
 
     async def _confirm_thumbnail_setting(self, page):
         """确认缩略图设置"""
