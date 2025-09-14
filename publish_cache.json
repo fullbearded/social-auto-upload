@@ -1,5 +1,20 @@
 {
-  "published_videos": {},
+  "published_videos": {
+    "tencent": {
+      "/Volumes/高速存储-158XXXX6956/0_书法自媒体/产品素材/阳章老师/20250914/成品/二字全图_抹茶.mp4": {
+        "publish_time": "2025-09-15T09:03:00",
+        "status": "success"
+      },
+      "/Volumes/高速存储-158XXXX6956/0_书法自媒体/产品素材/阳章老师/20250914/成品/二字全图_由申.mp4": {
+        "publish_time": "2025-09-16T09:00:00",
+        "status": "success"
+      },
+      "/Volumes/高速存储-158XXXX6956/0_书法自媒体/产品素材/阳章老师/20250914/成品/二字全图_戒律.mp4": {
+        "publish_time": "2025-09-17T09:02:00",
+        "status": "success"
+      }
+    }
+  },
   "failed_videos": {},
-  "last_update": "2025-09-14T19:44:36.483296"
+  "last_update": "2025-09-14T21:36:23.585986"
 }

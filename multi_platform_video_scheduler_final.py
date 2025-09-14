@@ -4,7 +4,7 @@
 支持开始日期配置、智能时间调整、发布缓存、失败重试等高级功能
 """
 
-import asyncio, sys, os, random, re
+import asyncio, sys, os, random, re, argparse
 from datetime import datetime
 
 # Windows系统编码处理
@@ -32,11 +32,50 @@ from utils.scheduler.ui_manager import UIManager
 from utils.scheduler.config_manager import ConfigManager
 
 
+def parse_publish_times(time_str: str) -> list:
+    """解析发布时间字符串，支持多种格式"""
+    times = []
+    
+    # 移除空格和方括号
+    time_str = time_str.strip().replace('[', '').replace(']', '')
+    
+    # 支持多种分隔符
+    for part in time_str.replace(',', ' ').replace('，', ' ').split():
+        try:
+            # 处理像 "5,8,12,17,19" 或 "5 8 12 17 19" 这样的格式
+            if ':' in part:
+                # 处理 "HH:MM" 格式
+                hour = int(part.split(':')[0])
+                times.append(hour)
+            else:
+                # 处理纯数字格式
+                hour = int(part)
+                if 0 <= hour <= 23:
+                    times.append(hour)
+                else:
+                    print(f"⚠️  无效时间: {hour}，请输入0-23之间的小时数")
+        except ValueError:
+            print(f"⚠️  无法解析时间: {part}")
+    
+    return times if times else None
+
+
 class VideoSchedulerFinal:
     """增强版视频调度器"""
 
-    def __init__(self):
-        self.config = ConfigManager.create_scheduler_config()
+    def __init__(self, custom_times=None, custom_config=None):
+        # 基础配置
+        base_config = ConfigManager.create_scheduler_config()
+        
+        # 应用自定义发布时间
+        if custom_times:
+            base_config['publish_times'] = custom_times
+        
+        # 应用其他自定义配置
+        if custom_config:
+            base_config.update(custom_config)
+        
+        self.config = base_config
         self.platforms = []
         self.video_files = []
         self.schedule = {}
@@ -60,10 +99,13 @@ class VideoSchedulerFinal:
                 print("❌ 没有找到MP4视频文件")
                 return
 
-            # 3. 获取开始日期
+            # 3. 交互式设置配置参数
+            self._interactive_config_setup()
+
+            # 4. 获取开始日期
             self.start_date = self._get_start_date()
 
-            # 4. 验证配置
+            # 5. 验证配置
             is_valid, message = validate_schedule_config(
                 self.video_files, 
                 self.config['publish_times'], 
@@ -73,22 +115,22 @@ class VideoSchedulerFinal:
                 print(f"❌ 配置验证失败: {message}")
                 return
 
-            # 5. 显示缓存状态
+            # 6. 显示缓存状态
             self._show_cache_status()
 
-            # 6. 创建智能调度计划
+            # 7. 创建智能调度计划
             if not self._create_smart_schedule():
                 return
 
-            # 7. 详细计划确认
+            # 8. 详细计划确认
             if not print_detailed_schedule(self.publish_datetimes, self.schedule, self.video_files):
                 print("❌ 发布取消")
                 return
 
-            # 8. 执行发布
+            # 9. 执行发布
             self._execute_publishing()
 
-            # 9. 最终统计
+            # 10. 最终统计
             UIManager.print_final_completion_stats(
                 len(self.video_files),
                 self.schedule,
@@ -101,6 +143,147 @@ class VideoSchedulerFinal:
             print(f"\n❌ 运行错误: {e}")
             import traceback
             traceback.print_exc()
+
+    def _interactive_config_setup(self):
+        """交互式设置配置参数"""
+        print(f"\n⚙️  配置参数设置")
+        print("=" * 50)
+        
+        # 显示当前配置
+        print(f"📋 当前配置:")
+        print(f"   📅 发布时间: {self.config['publish_times']}")
+        print(f"   🎲 分组大小: {self.config['group_size']}")
+        print(f"   ⏱️  随机偏移: {self.config['random_minutes']}分钟")
+        print(f"   📅 开始天数偏移: {self.config['start_days']}")
+        
+        # 询问是否修改配置
+        try:
+            modify_config = input(f"\n是否修改配置参数？(y/n，默认n): ").strip().lower()
+            if modify_config in ['y', 'yes', '是']:
+                self._modify_publish_times()
+                self._modify_group_size()
+                self._modify_random_minutes()
+                self._modify_start_days()
+                
+                print(f"\n✅ 配置更新完成:")
+                print(f"   📅 发布时间: {self.config['publish_times']}")
+                print(f"   🎲 分组大小: {self.config['group_size']}")
+                print(f"   ⏱️  随机偏移: {self.config['random_minutes']}分钟")
+                print(f"   📅 开始天数偏移: {self.config['start_days']}")
+            else:
+                print(f"ℹ️  使用当前配置")
+        except KeyboardInterrupt:
+            print(f"\n⚠️  使用当前配置")
+
+    def _modify_publish_times(self):
+        """修改发布时间"""
+        while True:
+            try:
+                print(f"\n📅 发布时间设置")
+                print(f"   当前: {self.config['publish_times']}")
+                print(f"   支持格式:")
+                print(f"     - 单一时间: [9]")
+                print(f"     - 多个时间: 9,15,20")
+                print(f"     - 空格分隔: 9 15 20")
+                
+                times_input = input(f"请输入发布时间 (回车保持当前): ").strip()
+                
+                if not times_input:
+                    print(f"   ℹ️  保持当前发布时间")
+                    break
+                
+                # 解析时间
+                parsed_times = parse_publish_times(times_input)
+                if parsed_times:
+                    self.config['publish_times'] = parsed_times
+                    print(f"   ✅ 发布时间已更新: {parsed_times}")
+                    break
+                else:
+                    print(f"   ❌ 格式错误，请重新输入")
+            except KeyboardInterrupt:
+                print(f"\n   ⚠️  保持当前发布时间")
+                break
+
+    def _modify_group_size(self):
+        """修改分组大小"""
+        while True:
+            try:
+                print(f"\n🎲 分组大小设置")
+                print(f"   当前: {self.config['group_size']}")
+                
+                group_input = input(f"请输入分组大小 (回车保持当前): ").strip()
+                
+                if not group_input:
+                    print(f"   ℹ️  保持当前分组大小")
+                    break
+                
+                try:
+                    group_size = int(group_input)
+                    if group_size > 0:
+                        self.config['group_size'] = group_size
+                        print(f"   ✅ 分组大小已更新: {group_size}")
+                        break
+                    else:
+                        print(f"   ❌ 分组大小必须大于0")
+                except ValueError:
+                    print(f"   ❌ 请输入有效的数字")
+            except KeyboardInterrupt:
+                print(f"\n   ⚠️  保持当前分组大小")
+                break
+
+    def _modify_random_minutes(self):
+        """修改随机时间偏移"""
+        while True:
+            try:
+                print(f"\n⏱️  随机时间偏移设置")
+                print(f"   当前: {self.config['random_minutes']}分钟")
+                
+                random_input = input(f"请输入随机偏移分钟数 (回车保持当前): ").strip()
+                
+                if not random_input:
+                    print(f"   ℹ️  保持当前随机偏移")
+                    break
+                
+                try:
+                    random_minutes = int(random_input)
+                    if random_minutes >= 0:
+                        self.config['random_minutes'] = random_minutes
+                        print(f"   ✅ 随机偏移已更新: {random_minutes}分钟")
+                        break
+                    else:
+                        print(f"   ❌ 随机偏移必须大于等于0")
+                except ValueError:
+                    print(f"   ❌ 请输入有效的数字")
+            except KeyboardInterrupt:
+                print(f"\n   ⚠️  保持当前随机偏移")
+                break
+
+    def _modify_start_days(self):
+        """修改开始天数偏移"""
+        while True:
+            try:
+                print(f"\n📅 开始天数偏移设置")
+                print(f"   当前: {self.config['start_days']}")
+                
+                start_days_input = input(f"请输入开始天数偏移 (回车保持当前): ").strip()
+                
+                if not start_days_input:
+                    print(f"   ℹ️  保持当前开始天数偏移")
+                    break
+                
+                try:
+                    start_days = int(start_days_input)
+                    if start_days >= 0:
+                        self.config['start_days'] = start_days
+                        print(f"   ✅ 开始天数偏移已更新: {start_days}")
+                        break
+                    else:
+                        print(f"   ❌ 开始天数偏移必须大于等于0")
+                except ValueError:
+                    print(f"   ❌ 请输入有效的数字")
+            except KeyboardInterrupt:
+                print(f"\n   ⚠️  保持当前开始天数偏移")
+                break
 
     def _get_start_date(self):
         """获取开始日期"""
@@ -355,6 +538,132 @@ class VideoSchedulerFinal:
                 print(f"   💡 提示: 重新运行脚本将自动重试失败的视频")
 
 
+def create_argument_parser():
+    """创建命令行参数解析器"""
+    parser = argparse.ArgumentParser(
+        description='多平台智能视频调度发布器 - 增强版',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  python multi_platform_video_scheduler_final.py
+  python multi_platform_video_scheduler_final.py --times '[9]'
+  python multi_platform_video_scheduler_final.py --times '9,15,20'
+  python multi_platform_video_scheduler_final.py --times '5,8,12,17,19' --start-date 2025-10-01
+  python multi_platform_video_scheduler_final.py --group-size 3 --random-minutes 5
+        """
+    )
+    
+    # 发布时间设置
+    parser.add_argument(
+        '--times', '-t', 
+        help=f'设置发布时间，如: "[9]" 或 "9,15,20" (默认: {ConfigManager.DEFAULT_PUBLISH_TIMES})'
+    )
+    
+    # 开始日期设置
+    parser.add_argument(
+        '--start-date', '-d',
+        help='设置开始日期，格式: YYYY-MM-DD (默认: 明天)'
+    )
+    
+    # 分组大小设置
+    parser.add_argument(
+        '--group-size', '-gs', 
+        type=int,
+        help=f'设置分组大小 (默认: {ConfigManager.DEFAULT_GROUP_SIZE})'
+    )
+    
+    # 随机时间偏移设置
+    parser.add_argument(
+        '--random-minutes', '-rm', 
+        type=int,
+        help=f'设置随机时间偏移分钟数 (默认: {ConfigManager.DEFAULT_RANDOM_MINUTES})'
+    )
+    
+    # 其他配置
+    parser.add_argument(
+        '--start-days', '-sd',
+        type=int,
+        help='设置开始天数偏移 (默认: 0)'
+    )
+    
+    # 显示版本信息
+    parser.add_argument(
+        '--version', '-v',
+        action='version',
+        version='%(prog)s 1.0.0'
+    )
+    
+    return parser
+
+
+def main():
+    """主函数"""
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    
+    # 解析发布时间
+    custom_times = None
+    if args.times:
+        custom_times = parse_publish_times(args.times)
+        if custom_times is None:
+            print(f"❌ 无法解析发布时间: {args.times}")
+            print(f"💡 支持格式: '[9]', '9,15,20', '5 8 12 17 19'")
+            return
+        print(f"✅ 命令行设置发布时间: {custom_times}")
+    
+    # 构建自定义配置
+    custom_config = {}
+    
+    if args.start_date:
+        # 验证日期格式
+        try:
+            parsed_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+            custom_config['start_date'] = args.start_date
+            print(f"📅 命令行设置开始日期: {args.start_date}")
+        except ValueError:
+            print(f"❌ 日期格式错误: {args.start_date}，请使用 YYYY-MM-DD 格式")
+            return
+    
+    if args.group_size is not None:
+        if args.group_size > 0:
+            custom_config['group_size'] = args.group_size
+            print(f"🎲 命令行设置分组大小: {args.group_size}")
+        else:
+            print(f"❌ 分组大小必须大于0")
+            return
+    
+    if args.random_minutes is not None:
+        if args.random_minutes >= 0:
+            custom_config['random_minutes'] = args.random_minutes
+            print(f"⏱️  命令行设置随机偏移: {args.random_minutes}分钟")
+        else:
+            print(f"❌ 随机偏移必须大于等于0")
+            return
+    
+    if args.start_days is not None:
+        if args.start_days >= 0:
+            custom_config['start_days'] = args.start_days
+            print(f"📅 命令行设置开始天数偏移: {args.start_days}")
+        else:
+            print(f"❌ 开始天数必须大于等于0")
+            return
+    
+    # 显示配置摘要
+    print("\n" + "="*60)
+    print("🚀 多平台智能视频调度发布器")
+    print("="*60)
+    
+    # 创建调度器实例
+    try:
+        scheduler = VideoSchedulerFinal(custom_times=custom_times, custom_config=custom_config)
+        scheduler.run()
+    except KeyboardInterrupt:
+        print("\n❌ 用户中断操作")
+    except Exception as e:
+        print(f"\n❌ 启动失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 if __name__ == '__main__':
-    scheduler = VideoSchedulerFinal()
-    scheduler.run()
+    main()
