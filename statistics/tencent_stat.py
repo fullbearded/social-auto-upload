@@ -95,6 +95,13 @@ async def get_tencent_statistics(cookie_path: str, debug: bool = False) -> Dict[
             return stats_data
             
     except Exception as e:
+        # 调试模式下，即使出错也要保持浏览器打开
+        if debug:
+            tencent_logger.error(f"❌ 获取 tencent 统计数据时出错: 获取腾讯视频号统计数据失败: {e}")
+            tencent_logger.info("🔍 调试模式已启用，浏览器将保持打开状态以便调试")
+            tencent_logger.info("请在浏览器中检查问题，然后按回车键继续...")
+            if 'page' in locals():
+                await page.pause()
         raise TencentStatsError(f"获取腾讯视频号统计数据失败: {e}")
     finally:
         # 非调试模式下关闭浏览器

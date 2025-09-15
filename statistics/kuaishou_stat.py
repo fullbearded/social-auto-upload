@@ -100,10 +100,11 @@ async def get_kuaishou_statistics(cookie_path: str, debug: bool = False) -> Opti
             
             # 访问快手个人主页或主页
             try:
-                await page.goto('https://www.kuaishou.com/profile', wait_until='networkidle')
+                await page.goto('https://cp.kuaishou.com/profile', wait_until='networkidle')
             except:
                 # 如果profile页面404，尝试访问主页
-                await page.goto('https://www.kuaishou.com/', wait_until='networkidle')
+                print("⚠️  无法访问个人主页，尝试访问主页...")
+                await page.goto('https://cp.kuaishou.com/profile', wait_until='networkidle')
             
             # 等待页面加载
             await asyncio.sleep(3)
@@ -121,7 +122,14 @@ async def get_kuaishou_statistics(cookie_path: str, debug: bool = False) -> Opti
                 # 检查是否包含登录相关内容
                 if '登录' in page_title or 'login' in current_url:
                     print("❌ 检测到登录页面，Cookie可能已失效")
+                    if debug:
+                        print("🔍 调试模式：请手动登录后按回车键继续...")
+                        await page.pause()
                     return None
+                
+                # 检查是否为404页面
+                if '404' in page_title or '404' in current_url:
+                    print("⚠️  页面返回404，但继续尝试提取数据")
                 
                 # 尝试找到用户信息元素（但不强制要求）
                 user_elements = await page.query_selector_all('.user-info, .profile-header, .user-profile, [class*="user"], [class*="profile"]')
@@ -273,7 +281,13 @@ async def get_kuaishou_statistics(cookie_path: str, debug: bool = False) -> Opti
                 print("⚠️  获取到的数据可能不完整")
                 if debug:
                     print("🔍 调试模式：请检查页面显示是否正常")
-                    await asyncio.sleep(5)
+                    print("🔍 按回车键继续...")
+                    try:
+                        await page.pause()
+                    except:
+                        pass
+                # 在调试模式下，即使数据不完整也返回，让用户决定
+                return stats_data
             else:
                 print(f"✅ 成功获取快手数据: 粉丝{stats_data['followers']:,} 关注{stats_data['following']:,} 获赞{stats_data['likes']:,}")
             
@@ -288,10 +302,21 @@ async def get_kuaishou_statistics(cookie_path: str, debug: bool = False) -> Opti
         print(f"❌ Cookie 文件格式错误: {e}")
         return None
     except Exception as e:
-        print(f"❌ 获取快手统计数据时出错: {e}")
+        print(f"❌ 获取 kuaishou 统计数据时出错: {e}")
         if debug:
+            print("🔍 调试模式已启用，浏览器将保持打开状态以便调试")
+            print("请在浏览器中检查问题，然后按回车键继续...")
             import traceback
             traceback.print_exc()
+            # 尝试保持浏览器打开以便调试
+            try:
+                if 'browser' in locals() and browser:
+                    # 创建一个新页面用于暂停
+                    page = await browser.new_page()
+                    await page.goto("about:blank")
+                    await page.pause()
+            except:
+                pass
         return None
 
 

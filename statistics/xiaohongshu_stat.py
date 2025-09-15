@@ -139,6 +139,13 @@ async def get_xiaohongshu_statistics(cookie_path: str, debug: bool = False) -> O
             return stats_data
             
     except Exception as e:
+        # 调试模式下，即使出错也要保持浏览器打开
+        if debug:
+            print(f"❌ 获取 xiaohongshu 统计数据时出错: 获取小红书统计数据失败: {e}")
+            print("🔍 调试模式已启用，浏览器将保持打开状态以便调试")
+            print("请在浏览器中检查问题，然后按回车键继续...")
+            if 'page' in locals():
+                await page.pause()
         raise XiaohongshuStatsError(f"获取小红书统计数据失败: {e}")
     finally:
         # 非调试模式下关闭浏览器

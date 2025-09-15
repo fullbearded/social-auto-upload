@@ -149,6 +149,13 @@ class StatisticsManager:
             return None
         except Exception as e:
             print(f"❌ 获取 {platform} 统计数据时出错: {e}")
+            if debug:
+                print("🔍 调试模式已启用，浏览器可能保持打开状态以便调试")
+                print("请检查浏览器中的错误状态，然后按回车键继续...")
+                try:
+                    input()
+                except KeyboardInterrupt:
+                    print("⚠️  用户中断调试")
             return None
 
     @classmethod

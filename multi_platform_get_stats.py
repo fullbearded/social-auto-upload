@@ -13,6 +13,9 @@ from pathlib import Path
 # Windows系统编码处理
 if sys.platform == 'win32': 
     os.system('chcp 65001')
+    # 确保标准输出使用UTF-8
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
 
 # 工具类导入
 from utils.multi_platform_ui import MultiPlatformUIManager
@@ -120,40 +123,7 @@ class MultiStatsGetter:
         for i, platform in enumerate(self.platforms, 1):
             MultiPlatformUIManager.print_progress(i, total_platforms, platform, "获取统计数据中...")
             
-            data = await StatisticsManager.get_platform_statistics(platform, self.debug_mode)
-            self.results[platform] = data
-            
-            if data is not None:
-                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "✅ 成功")
-                
-                # 简要显示获取到的数据
-                followers = data.get('followers', 0)
-                following = data.get('following', 0)
-                likes = data.get('likes', 0)
-                videos = data.get('videos_count', 0)
-                
-                info = f"粉丝:{followers:,} 关注:{following:,} 获赞:{likes:,}"
-                if videos > 0:
-                    info += f" 视频:{videos:,}"
-                print(f"   {'':21} {info}")
-            else:
-                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "❌ 失败")
-    
-    async def _get_stats_with_confirmation(self):
-        """逐个确认获取统计数据"""
-        total_platforms = len(self.platforms)
-        
-        for i, platform in enumerate(self.platforms, 1):
-            # 检查Cookie是否存在
-            if not StatisticsManager.cookie_exists(platform):
-                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "❌ 缺少Cookie")
-                self.results[platform] = None
-                continue
-            
-            # 询问用户
-            if MultiPlatformUIManager.confirm_platform_action(platform, '统计数据'):
-                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "获取统计数据中...")
-                
+            try:
                 data = await StatisticsManager.get_platform_statistics(platform, self.debug_mode)
                 self.results[platform] = data
                 
@@ -172,6 +142,69 @@ class MultiStatsGetter:
                     print(f"   {'':21} {info}")
                 else:
                     MultiPlatformUIManager.print_progress(i, total_platforms, platform, "❌ 失败")
+                    
+            except Exception as e:
+                print(f"   {'':21} ❌ 获取 {platform} 统计数据时发生异常: {e}")
+                self.results[platform] = None
+                
+                # 调试模式下提示用户检查
+                if self.debug_mode:
+                    print(f"   {'':21} 🔍 调试模式：请检查浏览器中的错误状态")
+                    print(f"   {'':21}    按回车键继续下一个平台...")
+                    try:
+                        input()
+                    except KeyboardInterrupt:
+                        print(f"\n   {'':21} ⚠️  用户中断调试")
+                        break
+    
+    async def _get_stats_with_confirmation(self):
+        """逐个确认获取统计数据"""
+        total_platforms = len(self.platforms)
+        
+        for i, platform in enumerate(self.platforms, 1):
+            # 检查Cookie是否存在
+            if not StatisticsManager.cookie_exists(platform):
+                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "❌ 缺少Cookie")
+                self.results[platform] = None
+                continue
+            
+            # 询问用户
+            if MultiPlatformUIManager.confirm_platform_action(platform, '统计数据'):
+                MultiPlatformUIManager.print_progress(i, total_platforms, platform, "获取统计数据中...")
+                
+            try:
+                data = await StatisticsManager.get_platform_statistics(platform, self.debug_mode)
+                self.results[platform] = data
+                
+                if data is not None:
+                    MultiPlatformUIManager.print_progress(i, total_platforms, platform, "✅ 成功")
+                    
+                    # 简要显示获取到的数据
+                    followers = data.get('followers', 0)
+                    following = data.get('following', 0)
+                    likes = data.get('likes', 0)
+                    videos = data.get('videos_count', 0)
+                    
+                    info = f"粉丝:{followers:,} 关注:{following:,} 获赞:{likes:,}"
+                    if videos > 0:
+                        info += f" 视频:{videos:,}"
+                    print(f"   {'':21} {info}")
+                else:
+                    MultiPlatformUIManager.print_progress(i, total_platforms, platform, "❌ 失败")
+                    
+            except Exception as e:
+                print(f"   {'':21} ❌ 获取 {platform} 统计数据时发生异常: {e}")
+                self.results[platform] = None
+                
+                # 调试模式下提示用户检查
+                if self.debug_mode:
+                    print(f"   {'':21} 🔍 调试模式：请检查浏览器中的错误状态")
+                    print(f"   {'':21}    按回车键继续下一个平台...")
+                    try:
+                        input()
+                    except KeyboardInterrupt:
+                        print(f"\n   {'':21} ⚠️  用户中断调试")
+                        break
             else:
                 MultiPlatformUIManager.print_progress(i, total_platforms, platform, "⏭️  用户跳过")
                 self.results[platform] = None
