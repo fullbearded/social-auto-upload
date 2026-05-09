@@ -10,7 +10,7 @@ import os
 import platform
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
-from playwright.async_api import Page, Locator
+from patchright.async_api import Page, Locator
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent

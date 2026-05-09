@@ -168,10 +168,10 @@ def main():
     
     # 检查依赖
     try:
-        import playwright
-        print("✅ Playwright 已安装")
+        import patchright
+        print("✅ Patchright 已安装")
     except ImportError:
-        print("❌ Playwright 未安装，请运行: pip install playwright")
+        print("❌ Patchright 未安装，请运行: uv sync")
         return
     
     try:
