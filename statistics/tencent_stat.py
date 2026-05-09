@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Any
 
-from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+from patchright.async_api import async_playwright, Page, Browser, BrowserContext
 
 from conf import LOCAL_CHROME_PATH
 from utils.base_social_media import set_init_script

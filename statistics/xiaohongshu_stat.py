@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
-from playwright.async_api import async_playwright, Page
+from patchright.async_api import async_playwright, Page
 from conf import LOCAL_CHROME_PATH
 
 # 日志配置
