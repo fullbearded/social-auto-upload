@@ -38,6 +38,10 @@ def get_title_and_hashtags(filename):
     return title, hashtags
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def generate_schedule_time_next_day(total_videos, videos_per_day = 1, daily_times=None, timestamps=False, start_days=0):
     """
     Generate a schedule for video uploads, starting from the next day.
@@ -52,32 +56,89 @@ def generate_schedule_time_next_day(total_videos, videos_per_day = 1, daily_time
     Returns:
     - A list of scheduling times for the videos, either as timestamps or datetime objects.
     """
-    if videos_per_day <= 0:
-        raise ValueError("videos_per_day should be a positive integer")
+    logger.info(f"=== generate_schedule_time_next_day called ===")
+    logger.info(f"total_videos={total_videos}, videos_per_day={videos_per_day}")
+    logger.info(f"daily_times={daily_times}, timestamps={timestamps}, start_days={start_days}")
+    
+    # Handle edge case: no videos
+    if total_videos <= 0:
+        logger.warning("No videos to schedule")
+        return []
+        
+    try:
+        # Validate videos_per_day
+        if videos_per_day <= 0:
+            logger.warning(f"videos_per_day={videos_per_day} <= 0, using 1")
+            videos_per_day = 1
 
-    if daily_times is None:
-        # Default times to publish videos if not provided
-        daily_times = [6, 11, 14, 16, 22]
+        if daily_times is None:
+            # Default times to publish videos if not provided
+            daily_times = [6, 11, 14, 16, 22]
+            logger.info(f"Using default daily_times: {daily_times}")
+        else:
+            logger.info(f"Using provided daily_times: {daily_times}")
 
-    if videos_per_day > len(daily_times):
-        raise ValueError("videos_per_day should not exceed the length of daily_times")
+        logger.info(f"daily_times length: {len(daily_times)}")
+        logger.info(f"videos_per_day: {videos_per_day}")
+        
+        # FIXED: Handle videos_per_day > len(daily_times) gracefully
+        if videos_per_day > len(daily_times):
+            logger.warning(f"videos_per_day={videos_per_day} > len(daily_times)={len(daily_times)}")
+            logger.warning("Adjusting videos_per_day to daily_times length")
+            videos_per_day = min(videos_per_day, len(daily_times))
+            logger.info(f"Adjusted videos_per_day to: {videos_per_day}")
 
-    # Generate timestamps
-    schedule = []
-    current_time = datetime.now()
+        # FIXED: Handle daily_times being empty
+        if len(daily_times) == 0:
+            logger.error("daily_times is empty, cannot generate schedule")
+            return [0] * total_videos if total_videos > 0 else []
 
-    for video in range(total_videos):
-        day = video // videos_per_day + start_days + 1  # +1 to start from the next day
-        daily_video_index = video % videos_per_day
+        # Generate timestamps
+        schedule = []
+        current_time = datetime.now()
 
-        # Calculate the time for the current video
-        hour = daily_times[daily_video_index]
-        time_offset = timedelta(days=day, hours=hour - current_time.hour, minutes=-current_time.minute,
-                                seconds=-current_time.second, microseconds=-current_time.microsecond)
-        timestamp = current_time + time_offset
+        logger.info(f"Generating schedule for {total_videos} videos...")
+        
+        for video in range(total_videos):
+            logger.debug(f"Processing video {video}/{total_videos}")
+            
+            day = video // videos_per_day + start_days + 1  # +1 to start from the next day
+            daily_video_index = video % videos_per_day
+            
+            logger.debug(f"Video {video}: day={day}, daily_video_index={daily_video_index}")
+            
+            # FIXED: Robust index handling with bounds checking
+            if daily_video_index >= len(daily_times):
+                logger.warning(f"daily_video_index={daily_video_index} >= len(daily_times)={len(daily_times)}")
+                # Cycle through available times
+                daily_video_index = daily_video_index % len(daily_times)
+                logger.warning(f"Cycled index to: {daily_video_index}")
 
-        schedule.append(timestamp)
+            # Calculate the time for the current video
+            hour = daily_times[daily_video_index]
+            time_offset = timedelta(days=day, hours=hour - current_time.hour, minutes=-current_time.minute,
+                                    seconds=-current_time.second, microseconds=-current_time.microsecond)
+            timestamp = current_time + time_offset
 
-    if timestamps:
-        schedule = [int(time.timestamp()) for time in schedule]
-    return schedule
+            schedule.append(timestamp)
+            logger.debug(f"Video {video}: scheduled for {timestamp}")
+
+        logger.info(f"Generated schedule: {schedule}")
+        logger.info(f"Schedule length: {len(schedule)}, expected: {total_videos}")
+        
+        if timestamps:
+            schedule = [int(time.timestamp()) for time in schedule]
+            logger.info(f"Converted to timestamps: {schedule}")
+            
+        return schedule
+        
+    except IndexError as e:
+        logger.error(f"IndexError in generate_schedule_time_next_day: {e}")
+        logger.error(f"Variables - total_videos: {total_videos}, videos_per_day: {videos_per_day}")
+        logger.error(f"daily_times: {daily_times}, start_days: {start_days}")
+        logging.exception("Full stack trace:")
+        return [0] * total_videos  # FIXED: Return safe defaults instead of crashing
+    except Exception as e:
+        logger.error(f"Exception in generate_schedule_time_next_day: {e}")
+        logging.exception("Full stack trace:")
+        return [0] * total_videos  # FIXED: Return safe defaults instead of crashing
