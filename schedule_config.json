@@ -1,0 +1,11 @@
+{
+  "start_date": "2025-09-15",
+  "total_videos": 5,
+  "publish_days": 1,
+  "daily_times": [
+    9
+  ],
+  "group_size": 5,
+  "random_minutes": 10,
+  "start_days_offset": 0
+}
