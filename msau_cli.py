@@ -123,25 +123,31 @@ def select_channels(action_label: str = "操作") -> list[str]:
 
 # ── Login ────────────────────────────────────────────────────────
 
-async def login_account(account_name: str, channels: list[str], headless: bool = True) -> dict:
-    """对指定账号的指定渠道依次执行登录"""
+async def login_account(account_name: str, channels: list[str], headless: bool = True, timeout: int = 60) -> dict:
+    """对指定账号的指定渠道依次执行登录，每个渠道限时 timeout 秒"""
     results: dict[str, dict] = {}
 
     for ch in channels:
         account_file = resolve_account_file(ch, account_name)
         display = CHANNEL_DISPLAY_NAMES.get(ch, ch)
         print(f"\n{'=' * 50}")
-        print(f"🔄 正在登录 {display} ({ch}) → {account_file.name}")
+        print(f"🔄 正在登录 {display} ({ch}) → {account_file.name}  [超时 {timeout}s]")
         print(f"{'=' * 50}")
 
         try:
-            result = await _do_login(ch, str(account_file), headless=headless)
+            result = await asyncio.wait_for(
+                _do_login(ch, str(account_file), headless=headless),
+                timeout=timeout,
+            )
             results[ch] = result
             if result.get("success"):
                 print(f"✅ {display} 登录成功")
             else:
                 msg = result.get("message", "未知错误")
                 print(f"❌ {display} 登录失败: {msg}")
+        except asyncio.TimeoutError:
+            results[ch] = {"success": False, "message": f"登录超时 ({timeout}s)"}
+            print(f"⏰ {display} 登录超时 ({timeout}s)，跳到下一个渠道")
         except Exception as exc:
             results[ch] = {"success": False, "message": str(exc)}
             print(f"❌ {display} 登录异常: {exc}")
@@ -200,7 +206,9 @@ async def check_account(account_name: str, channels: list[str]) -> dict[str, boo
 
 async def _do_check(channel: str, account_file: Path) -> bool:
     """根据 channel 调用对应的 cookie_auth 函数"""
-    if not account_file.exists():
+    from utils.base_social_media import has_user_data_dir
+
+    if not account_file.exists() and not has_user_data_dir(str(account_file)):
         return False
 
     if channel == "douyin":
@@ -508,6 +516,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_login = sub.add_parser("login", help="登录指定账号的渠道")
     p_login.add_argument("account", help="账号名称 (如 phone1)")
     p_login.add_argument("-c", "--channels", help="渠道列表 (逗号分隔，如 douyin,bilibili)")
+    p_login.add_argument("--timeout", "-T", type=int, default=60, help="每个渠道登录超时秒数 (默认: 60)")
     p_login.add_argument("--headless", action="store_true", default=True, help="无头模式 (默认)")
     p_login.add_argument("--no-headless", action="store_false", dest="headless", help="显示浏览器")
 
@@ -583,7 +592,7 @@ async def dispatch(args: argparse.Namespace) -> int:
     print(f"{'=' * 60}")
 
     if args.action == "login":
-        results = await login_account(account, channels, headless=args.headless)
+        results = await login_account(account, channels, headless=args.headless, timeout=args.timeout)
         print(f"\n{'=' * 60}")
         print("📊 登录结果汇总")
         print(f"{'=' * 60}")
@@ -605,25 +614,88 @@ async def dispatch(args: argparse.Namespace) -> int:
         return 0 if valid_count == len(results) else 1
 
     elif args.action == "upload-video":
-        # 解析发布时间
-        publish_times = [5, 8, 12, 17, 19]
-        if getattr(args, "times", None):
-            parsed = parse_publish_times(args.times)
+        import re
+
+        default_videos_dir = getattr(args, "videos_dir", None) or Path(BASE_DIR) / "videos"
+        default_times = [5, 8, 12, 17, 19]
+        default_random = 10
+        default_start = "tomorrow"
+
+        print(f"\n{'─' * 50}")
+        print(f"📋 上传配置（直接回车使用默认值）")
+        print(f"{'─' * 50}")
+
+        while True:
+            try:
+                raw = input(f"📁 视频目录 [{default_videos_dir}]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n❌ 已取消")
+                return 1
+            if not raw:
+                videos_dir = default_videos_dir
+                break
+            candidate = Path(raw).expanduser().resolve()
+            if candidate.is_dir():
+                videos_dir = candidate
+                break
+            print(f"❌ 目录不存在: {raw}")
+
+        while True:
+            try:
+                raw = input(f"⏰ 发布时间（逗号分隔小时数） [{','.join(map(str, default_times))}]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n❌ 已取消")
+                return 1
+            if not raw:
+                publish_times = default_times
+                break
+            parsed = parse_publish_times(raw)
             if parsed:
                 publish_times = parsed
-            else:
-                print(f"❌ 无法解析发布时间: {args.times}")
-                return 1
+                break
+            print(f"❌ 无法解析，请输入如 9,15,20 的格式")
 
-        start_date = getattr(args, "start_date", None) or "tomorrow"
+        while True:
+            try:
+                raw = input(f"🎲 随机偏移（分钟） [{default_random}]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n❌ 已取消")
+                return 1
+            if not raw:
+                random_minutes = default_random
+                break
+            try:
+                random_minutes = int(raw)
+                if random_minutes >= 0:
+                    break
+                print(f"❌ 请输入非负整数")
+            except ValueError:
+                print(f"❌ 请输入整数")
+
+        while True:
+            try:
+                raw = input(f"📅 开始日期（YYYY-MM-DD，或 'tomorrow'） [{default_start}]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n❌ 已取消")
+                return 1
+            if not raw:
+                start_date = default_start
+                break
+            if raw.lower() == "tomorrow":
+                start_date = "tomorrow"
+                break
+            if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+                start_date = raw
+                break
+            print(f"❌ 格式错误，请输入 YYYY-MM-DD 或 tomorrow")
 
         config = MsauUploadConfig(
             account_name=account,
             channels=channels,
-            videos_dir=args.videos_dir,
+            videos_dir=videos_dir,
             publish_times=publish_times,
             group_size=args.group_size,
-            random_minutes=args.random_minutes,
+            random_minutes=random_minutes,
             start_date=start_date,
             headless=args.headless,
             debug=args.debug,

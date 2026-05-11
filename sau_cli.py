@@ -10,6 +10,7 @@ from typing import Iterable, Sequence
 
 from conf import BASE_DIR
 from uploader.bilibili_uploader.runtime import run_biliup_command
+from utils.base_social_media import has_user_data_dir
 from uploader.douyin_uploader.main import (
     DOUYIN_PUBLISH_STRATEGY_IMMEDIATE,
     DOUYIN_PUBLISH_STRATEGY_SCHEDULED,
@@ -175,7 +176,7 @@ async def login_douyin_account(account_name: str, headless: bool = True) -> dict
 
 async def check_douyin_account(account_name: str) -> bool:
     account_file = resolve_account_file("douyin", account_name)
-    if not account_file.exists():
+    if not account_file.exists() and not has_user_data_dir(str(account_file)):
         return False
     return await douyin_cookie_auth(str(account_file))
 
@@ -187,7 +188,7 @@ async def login_kuaishou_account(account_name: str, headless: bool = True) -> di
 
 async def check_kuaishou_account(account_name: str) -> bool:
     account_file = resolve_account_file("kuaishou", account_name)
-    if not account_file.exists():
+    if not account_file.exists() and not has_user_data_dir(str(account_file)):
         return False
     return await kuaishou_cookie_auth(str(account_file))
 
@@ -199,7 +200,7 @@ async def login_xiaohongshu_account(account_name: str, headless: bool = True) ->
 
 async def check_xiaohongshu_account(account_name: str) -> bool:
     account_file = resolve_account_file("xiaohongshu", account_name)
-    if not account_file.exists():
+    if not account_file.exists() and not has_user_data_dir(str(account_file)):
         return False
     return await xiaohongshu_cookie_auth(str(account_file))
 
